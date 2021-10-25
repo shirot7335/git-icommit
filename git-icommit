@@ -1,0 +1,151 @@
+#!/bin/bash
+
+CMDNAME="$(basename $0)"
+
+# Branch Setting {{{
+DEFAULT_ORIGIN_BRANCH='main'
+#}}}
+# Commit Setting {{{
+DEFAULT_MESSAGE='initial commit'
+message="${DEFAULT_MESSAGE}"
+#}}}
+# Remote Setting {{{
+DEFAULT_REMOTE_REPO_TYPE='github'
+DEFAULT_REMOTE_REPO_ACCESS='ssh'
+DEFAULT_REMOTE_REPO_NAME="$(basename $(pwd))"
+DEFAULT_REMOTE_OWNER="$(git config user.name)"
+remote_flag=0
+push_flag=0
+remote_repo_access="${DEFAULT_REMOTE_REPO_ACCESS}"
+remote_repo_name="${DEFAULT_REMOTE_REPO_NAME}"
+remote_owner="${DEFAULT_REMOTE_OWNER}"
+#}}}
+
+
+usage_exit() {
+    cat <<HELP
+Usage: ${CMDNAME} [OPTION]...
+Create an empty Git repository and empty commit.
+
+[OPTION]
+    -m <msg>               Use the given <msg> as the INITIAL commit message.
+    -r                     Set remote repository. (github only)
+    -p                     Push ${DEFAULT_ORIGIN_BRANCH} branch to ${DEFAULT_REMOTE_REPO_TYPE}. (Basically, use it with the -r option.)
+    -a <access_type>       Use the given <access_type> for remote repository access. ('ssh' or 'https')
+    -n <repository_name>   Use the given <repository_name> when setting up a remote repository.
+    -o <repository_owner>  Use the given <repository_owner> when setting up a remote repository.
+    -s                     Display DEFAULT settings and exit.
+    -h                     Display this help and exit.
+HELP
+
+    exit 1;
+}
+
+default_setting() {
+    cat <<SETTING
+{
+  "branch": {
+    "origin": "${DEFAULT_ORIGIN_BRANCH}"
+  },
+  "commit": {
+    "message": "${DEFAULT_MESSAGE}"
+  },
+  "remote_repository": {
+    "owner": "${DEFAULT_REMOTE_OWNER}",
+    "name": "${DEFAULT_REMOTE_REPO_NAME}",
+    "type": "${DEFAULT_REMOTE_REPO_TYPE}",
+    "access": "${DEFAULT_REMOTE_REPO_ACCESS}"
+  }
+}
+SETTING
+}
+
+# Github Setup Func {{{
+_github__remote_repository_prefix_ssh() {
+    echo 'git@github.com:'
+}
+
+_github__remote_repository_prefix_https() {
+    echo 'https://github.com'
+}
+
+_github__set_remote_repository() {
+    _prefix="$1"
+
+    git remote add origin "${_prefix}/${remote_owner}/${remote_repo_name}.git"
+}
+
+github__setup_remote_repository() {
+    if [ "${remote_repo_access}" = 'ssh' ]; then
+        _github__set_remote_repository "$(_github__remote_repository_prefix_ssh)"
+    elif [ "${remote_repo_access}" = 'https' ]; then
+        _github__set_remote_repository "$(_github__remote_repository_prefix_https)"
+    fi
+}
+#}}}
+
+initial_empty_commit() {
+    git init
+    git commit --allow-empty -m "${message}"
+    git branch -M "${DEFAULT_ORIGIN_BRANCH}"
+}
+
+push_origin_branch() {
+    git push -u origin "${DEFAULT_ORIGIN_BRANCH}"
+}
+
+main() {
+    initial_empty_commit
+
+    if [ ${remote_flag} -eq 1 ]; then
+        github__setup_remote_repository
+    fi
+
+    if [ ${push_flag} -eq 1 ]; then
+        push_origin_branch
+    fi
+}
+
+while getopts ":m:rpa:n:o:sh" OPT; do
+    case "${OPT}" in
+        m)
+            message="${OPTARG}"
+            ;;
+        r)
+            remote_flag=1
+            ;;
+        p)
+            push_flag=1
+            ;;
+        a)
+            remote_repo_access="${OPTARG}"
+            ;;
+        n)
+            remote_repo_name="${OPTARG}"
+            ;;
+        o)
+            remote_owner="${OPTARG}"
+            ;;
+        s)
+            default_setting
+            exit 0
+            ;;
+        h | *)
+            usage_exit
+            ;;
+    esac
+done
+
+if [ -e $(pwd)/.git ]; then
+    echo ".git directory is already exists." 2>&1
+    exit 1;
+fi
+
+if [ ! "${remote_repo_access}" = 'ssh' ] && [ ! "${remote_repo_access}" = 'https' ]; then
+    echo "Unexpected access type: ${remote_repo_access}." 2>&1
+    usage_exit
+fi
+
+main
+
+exit 0;
